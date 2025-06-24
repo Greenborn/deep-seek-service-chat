@@ -56,7 +56,7 @@ app.post('/api/chat', async (req, res) => {
                 model: 'deepseek-chat', // Verifica el modelo correcto
                 messages: conversationHistory,
                 temperature: 0.7,
-                max_tokens: process.env.MAX_TOKENS
+                max_tokens: Number(process.env.MAX_TOKENS)
             },
             {
                 headers: {
