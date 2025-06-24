@@ -9,9 +9,10 @@ const app = express();
 app.use(bodyParser.json());
 
 const PROMT_FILE = 'promt_config.txt';
+let CONTEXT_PROMT = ''
 
 try {
-  const CONTEXT_PROMT = fs.readFileSync(PROMT_FILE, 'utf8');
+  CONTEXT_PROMT = fs.readFileSync(PROMT_FILE, 'utf8');
   console.log(`Contenido del archivo: ${CONTEXT_PROMT}`);
 } catch (err) {
   console.error(`Error al leer el archivo: ${err}`);
