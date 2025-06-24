@@ -3,9 +3,19 @@ require("dotenv").config({ path: '.env' })
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const fs = require('fs');
 
 const app = express();
 app.use(bodyParser.json());
+
+const PROMT_FILE = 'promt_config.txt';
+
+try {
+  const CONTEXT_PROMT = fs.readFileSync(PROMT_FILE, 'utf8');
+  console.log(`Contenido del archivo: ${CONTEXT_PROMT}`);
+} catch (err) {
+  console.error(`Error al leer el archivo: ${err}`);
+}
 
 // Configuración de DeepSeek
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'; // Verifica la URL actual de la API
@@ -28,7 +38,7 @@ app.post('/api/chat', async (req, res) => {
             conversations.set(userId, [
                 {
                     role: 'system',
-                    content: 'Eres un asistente útil especializado en asesoramiento personalizado. Responde en español.'
+                    content: CONTEXT_PROMT
                 }
             ]);
         }
