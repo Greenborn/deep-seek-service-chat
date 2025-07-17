@@ -25,26 +25,37 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'; // Veri
 const conversations = new Map();
 
 app.post('/api/chat', async (req, res) => {
-    const { userId, message } = req.body;
+    const { userId, message, botName } = req.body;
     
-    if (!userId || !message) {
-        return res.status(400).json({ error: 'Se requieren userId y message' });
+    if (!userId || !message || !botName) {
+        return res.status(400).json({ error: 'Se requieren userId, message y botName' });
     }
 
-    console.log("userId", userId, "message", message)
+    console.log("userId", userId, "message", message, "botName", botName)
+
+    let contextPrompt = '';
+    try {
+        const configPath = `configuracion/${botName}.json`;
+        const configData = fs.readFileSync(configPath, 'utf8');
+        const configJson = JSON.parse(configData);
+        contextPrompt = configJson.context_prompt;
+    } catch (err) {
+        return res.status(400).json({ error: `No se encontró configuración para el bot: ${botName}` });
+    }
 
     try {
-        // Obtener o crear el historial de conversación
-        if (!conversations.has(userId)) {
-            conversations.set(userId, [
+        // Obtener o crear el historial de conversación por usuario y bot
+        const conversationKey = `${userId}:${botName}`;
+        if (!conversations.has(conversationKey)) {
+            conversations.set(conversationKey, [
                 {
                     role: 'system',
-                    content: CONTEXT_PROMT
+                    content: contextPrompt
                 }
             ]);
         }
 
-        const conversationHistory = conversations.get(userId);
+        const conversationHistory = conversations.get(conversationKey);
         
         // Agregar el mensaje del usuario al historial
         conversationHistory.push({ role: 'user', content: message });
