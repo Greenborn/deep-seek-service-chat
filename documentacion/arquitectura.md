@@ -15,9 +15,11 @@ deep-seek-service-chat/
 ├── .gitignore           # Exclusiones de git
 ├── node_modules/        # Dependencias instaladas
 ├── configuracion/       # Configuración de prompts para cada bot (archivos .json)
-│   ├── assistant.json   # Prompt del bot "assistant"
-│   ├── soporte.json     # Prompt del bot "soporte"
-│   └── ventas.json      # Prompt del bot "ventas"
+│   ├── assistant.json   # Prompt del botassistant"
+│   ├── soporte.json     # Prompt del botsoporte"
+│   ├── ventas.json      # Prompt del bot "ventas"
+│   ├── bugon.json       # Prompt del bot bugon" (Greenborn)
+│   └── tita.json        # Prompt del bot "tita(señora mayor de Tandil)
 └── documentacion/
     └── arquitectura.md  # (Este archivo)
 ```
@@ -31,23 +33,22 @@ deep-seek-service-chat/
 
 ## Flujo de Funcionamiento
 1. **Inicialización**: Se cargan las variables de entorno y se prepara el servidor Express.
-2. **API REST**: El endpoint principal es `POST /api/chat`, que recibe `userId`, `message` y `botName`.
+2. **API REST**: El endpoint principal es `POST /api/chat`, que recibe `userId`, `message` y opcionalmente `botName`.
 3. **Gestión de Conversaciones**: Se mantiene un historial en memoria (por usuario y bot) para preservar el contexto conversacional.
-4. **Carga de Prompt**: El prompt de contexto se carga dinámicamente desde `configuracion/{botName}.json`.
-5. **Llamada a DeepSeek**: Se envía el historial a la API de DeepSeek y se recibe la respuesta del modelo.
-6. **Respuesta**: Se retorna la respuesta del asistente y se actualiza el historial.
+4. **Carga de Prompt**: El prompt de contexto se carga dinámicamente desde `configuracion/[object Object]botName}.json`.
+5. **Llamada a DeepSeek**: Se envía el historial a la API de DeepSeek y se recibe la respuesta del modelo.6 **Respuesta**: Se retorna la respuesta del asistente y se actualiza el historial.
 
 ## Variables de Entorno Sugeridas (`.env`)
 ```env
 DEEPSEEK_API_KEY=tu_api_key
 MAX_TOKENS=1024
-PORT=3000
+PORT=6789AULT_BOT=assistant
 ```
 
 ## Diagrama de Flujo
 ```mermaid
 graph TD;
-  Cliente -->|POST /api/chat (userId, message, botName)| Servidor_Express
+  Cliente -->|POST /api/chat (userId, message, botName opcional)| Servidor_Express
   Servidor_Express -->|userId, botName, message| Memoria_Conversaciones
   Servidor_Express -->|Historial + prompt dinámico| DeepSeek_API
   DeepSeek_API -->|Respuesta| Servidor_Express
@@ -59,6 +60,7 @@ graph TD;
 - **Seguridad**: No exponer la API Key en el código ni en repositorios públicos.
 - **Escalabilidad**: El almacenamiento en memoria limita la escalabilidad horizontal.
 - **Multi-bot**: Para agregar un nuevo bot, crea un archivo JSON en la carpeta `configuracion` con la clave `context_prompt`.
+- **Bot por defecto**: Si no se especifica `botName` en la petición, se usa el bot configurado en `DEFAULT_BOT` o "assistant como fallback.
 
 ---
 
