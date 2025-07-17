@@ -4,18 +4,30 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(bodyParser.json());
 
-const PROMT_FILE = 'promt_config.txt';
-let CONTEXT_PROMT = ''
+// Cargar configuración de bots en memoria al iniciar
+const botsConfig = {};
+const configDir = 'configuracion';
 
 try {
-  CONTEXT_PROMT = fs.readFileSync(PROMT_FILE, 'utf8');
-  console.log(`Contenido del archivo: ${CONTEXT_PROMT}`);
+    const configFiles = fs.readdirSync(configDir);
+    configFiles.forEach(file => {
+        if (file.endsWith('.json')) {
+            const botName = path.basename(file, '.json');
+            const configPath = path.join(configDir, file);
+            const configData = fs.readFileSync(configPath, 'utf8');
+            const configJson = JSON.parse(configData);
+            botsConfig[botName] = configJson;
+            console.log(`Bot cargado: ${botName}`);
+        }
+    });
+    console.log(`Total de bots cargados: ${Object.keys(botsConfig).length}`);
 } catch (err) {
-  console.error(`Error al leer el archivo: ${err}`);
+    console.error(`Error al cargar configuración de bots: ${err}`);
 }
 
 // Configuración de DeepSeek
@@ -33,15 +45,12 @@ app.post('/api/chat', async (req, res) => {
 
     console.log("userId", userId, "message", message, "botName", botName)
 
-    let contextPrompt = '';
-    try {
-        const configPath = `configuracion/${botName}.json`;
-        const configData = fs.readFileSync(configPath, 'utf8');
-        const configJson = JSON.parse(configData);
-        contextPrompt = configJson.context_prompt;
-    } catch (err) {
+    // Verificar si el bot existe en la configuración cargada
+    if (!botsConfig[botName]) {
         return res.status(400).json({ error: `No se encontró configuración para el bot: ${botName}` });
     }
+
+    const contextPrompt = botsConfig[botName].context_prompt;
 
     try {
         // Obtener o crear el historial de conversación por usuario y bot
