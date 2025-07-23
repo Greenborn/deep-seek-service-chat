@@ -5,13 +5,36 @@ const bodyParser = require('body-parser');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
+
+// Configuración de CORS
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Permitir requests sin origin (como aplicaciones móviles o Postman)
+        if (!origin) return callback(null, true);
+        
+        // Obtener orígenes permitidos desde variables de entorno
+        const allowedOrigins = process.env.CORS_ORIGINS ? 
+            process.env.CORS_ORIGINS.split(',') : 
+            ['http://localhost:3000', 'http://localhost:5173'];
+        
+        if (allowedOrigins.indexOf(origin) !==-1) {
+            callback(null, true);
+        } else {
+            callback(new Error('No permitido por CORS'));
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus:200};
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // Cargar configuración de bots en memoria al iniciar
 const botsConfig = {};
-const configDir = 'configuracion';
+const configDir = './configuracion';
 
 try {
     const configFiles = fs.readdirSync(configDir);

@@ -43,6 +43,7 @@ deep-seek-service-chat/
 DEEPSEEK_API_KEY=tu_api_key
 MAX_TOKENS=1024
 PORT=6789AULT_BOT=assistant
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173https://tu-dominio.com
 ```
 
 ## Diagrama de Flujo
