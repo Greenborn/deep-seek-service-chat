@@ -124,8 +124,7 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    console.log('CORS_ORIGINS permitidos:', process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:3000', 'http://localhost:5173']);
-});
+setTimeout(async () => {
+    const server = await app.listen(PORT);
+    console.log('Servidor escuchando en: ', PORT) 
+}, 100)
