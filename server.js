@@ -124,6 +124,7 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
+const PORT = process.env.PORT || 3000;
 setTimeout(async () => {
     const server = await app.listen(PORT);
     console.log('Servidor escuchando en: ', PORT) 
