@@ -22,7 +22,8 @@ function getBotNameArg() {
 const testData = {
   userId: 'testuser',
   message: 'Hola, ¿quién eres?',
-  botName: getBotNameArg()
+  botName: getBotNameArg(),
+  stream: true
 };
 
 function wait(ms) {
@@ -45,14 +46,35 @@ async function testRest() {
 function testWebSocket() {
   const ws = new WebSocket(WS_URL);
   ws.on('open', () => {
+    console.log('[WS] Conexión abierta, enviando mensaje...');
     ws.send(JSON.stringify(testData));
   });
   ws.on('message', (data) => {
-    console.log('Respuesta WebSocket:', data.toString());
-    ws.close();
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.chunk) {
+        process.stdout.write(msg.chunk);
+        console.log(' [WS] Fragmento recibido:', msg.chunk);
+      } else if (msg.end) {
+        console.log('\n[WS] FIN de respuesta WebSocket');
+        ws.close();
+      } else if (msg.error) {
+        console.error('\n[WS] Error WebSocket:', msg.error);
+        ws.close();
+      } else {
+        console.log('\n[WS] Respuesta WebSocket:', msg);
+        ws.close();
+      }
+    } catch (e) {
+      console.log('\n[WS] Respuesta WebSocket (raw):', data.toString());
+      ws.close();
+    }
   });
   ws.on('error', (err) => {
-    console.error('Error WebSocket:', err.message);
+    console.error('[WS] Error WebSocket:', err.message);
+  });
+  ws.on('close', () => {
+    console.log('[WS] Conexión cerrada');
   });
 }
 

@@ -18,7 +18,7 @@ const WS_PORT = process.env.WS_PORT || 6790;
 const wsServer = new WebSocket.Server({ port: WS_PORT });
 
 // Lógica de procesamiento de chat reutilizable
-async function processChat({ userId, message, botName }) {
+async function processChat({ userId, message, botName, stream = false, onStreamChunk }) {
     if (!userId || !message) {
         return { error: 'Se requieren userId y message' };
     }
@@ -36,24 +36,83 @@ async function processChat({ userId, message, botName }) {
         }
         const conversationHistory = conversations.get(conversationKey);
         conversationHistory.push({ role: 'user', content: message });
-        const response = await axios.post(
-            DEEPSEEK_API_URL,
-            {
-                model: 'deepseek-chat',
-                messages: conversationHistory,
-                temperature: 0.7,
-                max_tokens: Number(process.env.MAX_TOKENS)
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-                    'Content-Type': 'application/json'
+        if (stream && typeof onStreamChunk === 'function') {
+            // Streaming con axios y responseType: 'stream'
+            const response = await axios.post(
+                DEEPSEEK_API_URL,
+                {
+                    model: 'deepseek-chat',
+                    messages: conversationHistory,
+                    temperature: 0.7,
+                    max_tokens: Number(process.env.MAX_TOKENS),
+                    stream: true
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    responseType: 'stream'
                 }
-            }
-        );
-        const botResponse = response.data.choices[0].message.content;
-        conversationHistory.push({ role: 'assistant', content: botResponse });
-        return { response: botResponse };
+            );
+            let fullResponse = '';
+            console.log('[DeepSeek] Iniciando stream de respuesta...');
+            response.data.on('data', (chunk) => {
+                console.log('[DeepSeek] Chunk recibido:', chunk.toString());
+                const lines = chunk.toString().split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const payload = line.replace('data: ', '').trim();
+                        if (payload === '[DONE]') {
+                            console.log('[DeepSeek] [DONE] recibido');
+                            return;
+                        }
+                        try {
+                            const json = JSON.parse(payload);
+                            const content = json.choices?.[0]?.delta?.content;
+                            if (content) {
+                                console.log('[DeepSeek] Fragmento de respuesta:', content);
+                                fullResponse += content;
+                                onStreamChunk(content);
+                            }
+                        } catch (err) {
+                            console.log('[DeepSeek] Error parseando fragmento:', err);
+                        }
+                    }
+                }
+            });
+            return await new Promise((resolve, reject) => {
+                response.data.on('end', () => {
+                    console.log('[DeepSeek] Stream finalizado. Respuesta completa:', fullResponse);
+                    conversationHistory.push({ role: 'assistant', content: fullResponse });
+                    resolve({ response: fullResponse });
+                });
+                response.data.on('error', (err) => {
+                    console.log('[DeepSeek] Error en stream:', err);
+                    reject({ error: 'Error al procesar la solicitud' });
+                });
+            });
+        } else {
+            // Modo normal (no streaming)
+            const response = await axios.post(
+                DEEPSEEK_API_URL,
+                {
+                    model: 'deepseek-chat',
+                    messages: conversationHistory,
+                    temperature: 0.7,
+                    max_tokens: Number(process.env.MAX_TOKENS)
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+            const botResponse = response.data.choices[0].message.content;
+            conversationHistory.push({ role: 'assistant', content: botResponse });
+            return { response: botResponse };
+        }
     } catch (error) {
         console.error('Error al llamar a DeepSeek API:', error.response?.data || error.message);
         return { error: 'Error al procesar la solicitud' };
@@ -70,8 +129,18 @@ wsServer.on('connection', (ws) => {
             ws.send(JSON.stringify({ error: 'Formato de mensaje inválido' }));
             return;
         }
-        const result = await processChat(data);
-        ws.send(JSON.stringify(result));
+        // Si el cliente pide stream, activa el modo streaming
+        if (data.stream) {
+            let respuestaCompleta = '';
+            await processChat({ ...data, stream: true, onStreamChunk: (chunk) => {
+                ws.send(JSON.stringify({ chunk }));
+                respuestaCompleta += chunk;
+            }});
+            ws.send(JSON.stringify({ end: true }));
+        } else {
+            const result = await processChat(data);
+            ws.send(JSON.stringify(result));
+        }
     });
     ws.on('close', () => {
         console.log('Cliente WebSocket desconectado');
