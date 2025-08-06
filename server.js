@@ -14,9 +14,38 @@ const app = express();
 const http = require('http');
 const WebSocket = require('ws');
 
-const WS_PORT = process.env.WS_PORT || 6790;
-const wsServer = new WebSocket.Server({ port: WS_PORT });
-
+const WS_PORT = process.env.WS_PORT;
+if (WS_PORT) {
+    const wsServer = new WebSocket.Server({ port: WS_PORT });
+    wsServer.on('connection', (ws) => {
+        console.log('Cliente WebSocket conectado');
+        ws.on('message', async (message) => {
+            let data;
+            try {
+                data = JSON.parse(message);
+            } catch (e) {
+                ws.send(JSON.stringify({ error: 'Formato de mensaje inválido' }));
+                return;
+            }
+            // Si el cliente pide stream, activa el modo streaming
+            if (data.stream) {
+                let respuestaCompleta = '';
+                await processChat({ ...data, stream: true, onStreamChunk: (chunk) => {
+                    ws.send(JSON.stringify({ chunk }));
+                    respuestaCompleta += chunk;
+                }});
+                ws.send(JSON.stringify({ end: true }));
+            } else {
+                const result = await processChat(data);
+                ws.send(JSON.stringify(result));
+            }
+        });
+        ws.on('close', () => {
+            console.log('Cliente WebSocket desconectado');
+        });
+    });
+    console.log('WebSocket server escuchando en:', WS_PORT);
+}
 // Lógica de procesamiento de chat reutilizable
 async function processChat({ userId, message, botName, stream = false, onStreamChunk }) {
     if (!userId || !message) {
@@ -119,34 +148,7 @@ async function processChat({ userId, message, botName, stream = false, onStreamC
     }
 }
 
-wsServer.on('connection', (ws) => {
-    console.log('Cliente WebSocket conectado');
-    ws.on('message', async (message) => {
-        let data;
-        try {
-            data = JSON.parse(message);
-        } catch (e) {
-            ws.send(JSON.stringify({ error: 'Formato de mensaje inválido' }));
-            return;
-        }
-        // Si el cliente pide stream, activa el modo streaming
-        if (data.stream) {
-            let respuestaCompleta = '';
-            await processChat({ ...data, stream: true, onStreamChunk: (chunk) => {
-                ws.send(JSON.stringify({ chunk }));
-                respuestaCompleta += chunk;
-            }});
-            ws.send(JSON.stringify({ end: true }));
-        } else {
-            const result = await processChat(data);
-            ws.send(JSON.stringify(result));
-        }
-    });
-    ws.on('close', () => {
-        console.log('Cliente WebSocket desconectado');
-    });
-});
-console.log('WebSocket server escuchando en:', WS_PORT);
+
 
 // Configuración de CORS
 const corsOptions = {
