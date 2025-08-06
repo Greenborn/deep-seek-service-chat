@@ -7,7 +7,77 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 
+
 const app = express();
+
+// WebSocket
+const http = require('http');
+const WebSocket = require('ws');
+
+const WS_PORT = process.env.WS_PORT || 6790;
+const wsServer = new WebSocket.Server({ port: WS_PORT });
+
+// Lógica de procesamiento de chat reutilizable
+async function processChat({ userId, message, botName }) {
+    if (!userId || !message) {
+        return { error: 'Se requieren userId y message' };
+    }
+    const selectedBot = botName || process.env.DEFAULT_BOT || 'assistant';
+    if (!botsConfig[selectedBot]) {
+        return { error: `No se encontró configuración para el bot: ${selectedBot}` };
+    }
+    const contextPrompt = botsConfig[selectedBot].context_prompt;
+    try {
+        const conversationKey = `${userId}:${selectedBot}`;
+        if (!conversations.has(conversationKey)) {
+            conversations.set(conversationKey, [
+                { role: 'system', content: contextPrompt }
+            ]);
+        }
+        const conversationHistory = conversations.get(conversationKey);
+        conversationHistory.push({ role: 'user', content: message });
+        const response = await axios.post(
+            DEEPSEEK_API_URL,
+            {
+                model: 'deepseek-chat',
+                messages: conversationHistory,
+                temperature: 0.7,
+                max_tokens: Number(process.env.MAX_TOKENS)
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        const botResponse = response.data.choices[0].message.content;
+        conversationHistory.push({ role: 'assistant', content: botResponse });
+        return { response: botResponse };
+    } catch (error) {
+        console.error('Error al llamar a DeepSeek API:', error.response?.data || error.message);
+        return { error: 'Error al procesar la solicitud' };
+    }
+}
+
+wsServer.on('connection', (ws) => {
+    console.log('Cliente WebSocket conectado');
+    ws.on('message', async (message) => {
+        let data;
+        try {
+            data = JSON.parse(message);
+        } catch (e) {
+            ws.send(JSON.stringify({ error: 'Formato de mensaje inválido' }));
+            return;
+        }
+        const result = await processChat(data);
+        ws.send(JSON.stringify(result));
+    });
+    ws.on('close', () => {
+        console.log('Cliente WebSocket desconectado');
+    });
+});
+console.log('WebSocket server escuchando en:', WS_PORT);
 
 // Configuración de CORS
 const corsOptions = {
@@ -60,68 +130,16 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'; // Veri
 const conversations = new Map();
 
 app.post('/api/chat', async (req, res) => {
-    const { userId, message, botName } = req.body;
-    
-    if (!userId || !message) {
-        return res.status(400).json({ error: 'Se requieren userId y message' });
-    }
-
-    // Usar bot por defecto si no se especifica
-    const selectedBot = botName || process.env.DEFAULT_BOT || 'assistant';
-
-    console.log("userId", userId, "message", message, "botName", botName, "selectedBot", selectedBot)
-
-    // Verificar si el bot existe en la configuración cargada
-    if (!botsConfig[selectedBot]) {
-        return res.status(400).json({ error: `No se encontró configuración para el bot: ${selectedBot}` });
-    }
-
-    const contextPrompt = botsConfig[selectedBot].context_prompt;
-
-    try {
-        // Obtener o crear el historial de conversación por usuario y bot
-        const conversationKey = `${userId}:${selectedBot}`;
-        if (!conversations.has(conversationKey)) {
-            conversations.set(conversationKey, [
-                {
-                    role: 'system',
-                    content: contextPrompt
-                }
-            ]);
+    const result = await processChat(req.body);
+    if (result.error) {
+        // Validación de campos o error de negocio
+        if (result.error === 'Se requieren userId y message' || result.error.startsWith('No se encontró configuración')) {
+            return res.status(400).json(result);
         }
-
-        const conversationHistory = conversations.get(conversationKey);
-        
-        // Agregar el mensaje del usuario al historial
-        conversationHistory.push({ role: 'user', content: message });
-
-        // Llamar a la API de DeepSeek
-        const response = await axios.post(
-            DEEPSEEK_API_URL,
-            {
-                model: 'deepseek-chat', // Verifica el modelo correcto
-                messages: conversationHistory,
-                temperature: 0.7,
-                max_tokens: Number(process.env.MAX_TOKENS)
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        const botResponse = response.data.choices[0].message.content;
-        
-        // Agregar la respuesta al historial
-        conversationHistory.push({ role: 'assistant', content: botResponse });
-
-        res.json({ response: botResponse });
-    } catch (error) {
-        console.error('Error al llamar a DeepSeek API:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Error al procesar la solicitud' });
+        // Error interno
+        return res.status(500).json(result);
     }
+    res.json(result);
 });
 
 const PORT = process.env.PORT || 3000;
